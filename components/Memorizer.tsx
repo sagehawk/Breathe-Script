@@ -29,7 +29,6 @@ const Memorizer: React.FC<MemorizerProps> = ({ script, onExit }) => {
   // Timer State
   const [isTiming, setIsTiming] = useState(false);
   const [elapsed, setElapsed] = useState(0);
-  const [showStats, setShowStats] = useState(false);
   const startTimeRef = useRef<number>(0);
   const timerIntervalRef = useRef<number>(0);
 
@@ -52,10 +51,8 @@ const Memorizer: React.FC<MemorizerProps> = ({ script, onExit }) => {
       // Stop
       clearInterval(timerIntervalRef.current);
       setIsTiming(false);
-      setShowStats(true);
     } else {
       // Start
-      setShowStats(false);
       setElapsed(0);
       setIsTiming(true);
       startTimeRef.current = Date.now();
@@ -99,21 +96,21 @@ const Memorizer: React.FC<MemorizerProps> = ({ script, onExit }) => {
   const getSpeedFeedback = (wpm: number) => {
     if (wpm < 135) return { 
         label: "TOO SLOW", 
-        desc: "If you talk too slow, they think you're an idiot.", 
+        desc: "Trust goes down.", 
         color: "text-orange-400",
         bg: "bg-orange-500/10",
         border: "border-orange-500/20"
     };
     if (wpm > 185) return { 
         label: "TOO FAST", 
-        desc: "Trust goes down when you speak too fast.", 
+        desc: "Trust goes down.", 
         color: "text-red-400",
         bg: "bg-red-500/10",
         border: "border-red-500/20"
     };
     return { 
         label: "SWEET SPOT", 
-        desc: "High authority. Results-oriented tone.", 
+        desc: "High authority.", 
         color: "text-green-400",
         bg: "bg-green-500/10",
         border: "border-green-500/20"
@@ -130,40 +127,6 @@ const Memorizer: React.FC<MemorizerProps> = ({ script, onExit }) => {
 
   return (
     <div className="min-h-screen bg-black flex flex-col relative">
-      {/* Stats Overlay */}
-      {showStats && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-            <div className={`max-w-md w-full bg-zinc-900 border ${feedback.border} rounded-2xl p-8 shadow-2xl transform scale-100 transition-all`}>
-                <div className="text-center">
-                    <h3 className={`text-sm font-black uppercase tracking-widest mb-2 ${feedback.color}`}>{feedback.label}</h3>
-                    <div className="text-7xl font-mono font-bold text-white mb-2">
-                        {wpm} <span className="text-xl text-zinc-500">WPM</span>
-                    </div>
-                    <p className="text-zinc-400 mb-6">{feedback.desc}</p>
-                    
-                    <div className="bg-zinc-950 rounded-lg p-4 mb-6 border border-zinc-800 text-left">
-                         <div className="flex justify-between text-xs text-zinc-500 uppercase tracking-wider mb-2">
-                            <span>Time</span>
-                            <span>Word Count</span>
-                         </div>
-                         <div className="flex justify-between font-mono text-lg">
-                            <span>{formatTime(elapsed)}</span>
-                            <span>{totalWords}</span>
-                         </div>
-                    </div>
-
-                    <p className="text-xs text-zinc-600 italic mb-6">
-                        "If you talk too fast, trust goes down. If you talk too slow, they think you're an idiot. Target 135-185 WPM." — Alex Hormozi
-                    </p>
-
-                    <Button className="w-full" size="lg" onClick={() => setShowStats(false)}>
-                        Close
-                    </Button>
-                </div>
-            </div>
-        </div>
-      )}
-
       {/* Top Header */}
       <header className="border-b border-zinc-900 p-4 sticky top-0 bg-black/80 backdrop-blur-md z-10 flex flex-wrap gap-4 justify-between items-center">
         <div className="flex items-center space-x-4">
@@ -179,28 +142,44 @@ const Memorizer: React.FC<MemorizerProps> = ({ script, onExit }) => {
           </h1>
         </div>
 
-        {/* Timer Control */}
-        <div className="flex items-center justify-center">
+        {/* Timer Control & Stats */}
+        <div className="flex flex-col md:flex-row items-center gap-3 justify-center order-last md:order-none w-full md:w-auto mt-2 md:mt-0">
+            {!isTiming && elapsed > 0 && (
+                <div className={`flex items-center gap-3 px-4 py-1.5 rounded-lg border ${feedback.bg} ${feedback.border} animate-in fade-in slide-in-from-top-2`}>
+                    <div className="text-right">
+                        <div className={`text-xl font-black leading-none ${feedback.color}`}>{wpm}</div>
+                        <div className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold">WPM</div>
+                    </div>
+                    <div className="h-6 w-px bg-white/10"></div>
+                    <div className="flex flex-col">
+                        <span className={`text-[10px] font-black uppercase tracking-widest leading-tight ${feedback.color}`}>{feedback.label}</span>
+                        <span className="text-[9px] text-zinc-400 leading-tight">Target: 135-185</span>
+                    </div>
+                </div>
+            )}
+            
             <button 
                 onClick={toggleTimer}
-                className={`flex items-center space-x-3 px-4 py-2 rounded-full font-mono transition-all border ${
+                className={`flex items-center space-x-3 px-5 py-2 rounded-full font-mono transition-all border ${
                     isTiming 
                     ? 'bg-red-500/10 border-red-500/50 text-red-400 animate-pulse' 
-                    : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                    : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-white'
                 }`}
             >
                 {isTiming ? (
                     <>
                         <div className="w-2 h-2 rounded-full bg-red-500"></div>
                         <span className="font-bold">{formatTime(elapsed)}</span>
-                        <span className="text-xs font-sans font-bold uppercase tracking-wider ml-2">Stop</span>
+                        <span className="text-xs font-sans font-bold uppercase tracking-wider ml-1">Stop</span>
                     </>
                 ) : (
                     <>
                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        <span className="text-xs font-sans font-bold uppercase tracking-wider">Start Timer</span>
+                        <span className="text-xs font-sans font-bold uppercase tracking-wider">
+                            {elapsed > 0 ? "Start Again" : "Start Timer"}
+                        </span>
                     </>
                 )}
             </button>

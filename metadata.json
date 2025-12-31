@@ -1,0 +1,7 @@
+{
+  "name": "Breathe: The Script Memorizer",
+  "description": "A high-performance script memorization tool based on the Alex Hormozi method. Input your interview scripts, read them aloud, and black out words one-by-one until you can breathe the script from memory.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

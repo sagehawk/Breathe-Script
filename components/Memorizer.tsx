@@ -5,16 +5,19 @@ import Button from './Button';
 interface MemorizerProps {
   script: Script;
   onExit: () => void;
+  onSave: (script: Partial<Script>) => void;
 }
 
-const Memorizer: React.FC<MemorizerProps> = ({ script, onExit }) => {
-  // Split content into words while preserving spacing and punctuation
+const Memorizer: React.FC<MemorizerProps> = ({ script, onExit, onSave }) => {
+  // Modes: 'script' (Blackout) or 'bullets' (Cues)
+  const [mode, setMode] = useState<'script' | 'bullets'>('script');
+  const [bullets, setBullets] = useState(script.bullets || '');
+
+  // --- Script Mode Logic ---
   const words = useMemo(() => {
-    // This regex splits by spaces but keeps the spaces in the result
     return script.content.split(/(\s+)/);
   }, [script.content]);
 
-  // Actual word indices (ignoring whitespace for blacking out)
   const wordIndices = useMemo(() => {
     return words
       .map((w, idx) => (/\S/.test(w) ? idx : -1))
@@ -22,26 +25,34 @@ const Memorizer: React.FC<MemorizerProps> = ({ script, onExit }) => {
   }, [words]);
 
   const totalWords = wordIndices.length;
-
   const [blackedOutCount, setBlackedOutCount] = useState(0);
   const [peekIndex, setPeekIndex] = useState<number | null>(null);
-  
-  // Timer State
+
+  // --- Timer State ---
   const [isTiming, setIsTiming] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const startTimeRef = useRef<number>(0);
   const timerIntervalRef = useRef<number>(0);
 
+  // Handle saving bullets when they change (debounced or on unmount ideally, here we do on change for simplicity)
+  useEffect(() => {
+    if (bullets !== script.bullets) {
+       const timer = setTimeout(() => {
+         onSave({ ...script, bullets });
+       }, 500);
+       return () => clearTimeout(timer);
+    }
+  }, [bullets, script, onSave]);
+
   useEffect(() => {
     if (peekIndex !== null) {
       const timer = setTimeout(() => {
         setPeekIndex(null);
-      }, 600); // 0.6s peek duration
+      }, 600); 
       return () => clearTimeout(timer);
     }
   }, [peekIndex]);
 
-  // Timer Cleanup
   useEffect(() => {
     return () => clearInterval(timerIntervalRef.current);
   }, []);
@@ -126,7 +137,7 @@ const Memorizer: React.FC<MemorizerProps> = ({ script, onExit }) => {
   };
 
   return (
-    <div className="min-h-screen bg-black flex flex-col relative">
+    <div className="min-h-screen bg-black flex flex-col relative overflow-hidden">
       {/* Top Header */}
       <header className="border-b border-zinc-900 p-4 sticky top-0 bg-black/80 backdrop-blur-md z-10 flex flex-wrap gap-4 justify-between items-center">
         <div className="flex items-center space-x-4">
@@ -136,10 +147,24 @@ const Memorizer: React.FC<MemorizerProps> = ({ script, onExit }) => {
               </svg>
             Exit
           </Button>
+          
           <div className="hidden md:block h-6 w-px bg-zinc-800"></div>
-           <h1 className="hidden md:block text-sm font-bold tracking-widest uppercase text-zinc-400 max-w-[200px] truncate">
-            {script.title}
-          </h1>
+          
+          {/* Mode Switcher */}
+          <div className="flex bg-zinc-900 rounded-lg p-1 border border-zinc-800">
+             <button 
+                onClick={() => setMode('script')}
+                className={`px-3 py-1 rounded text-xs font-bold uppercase tracking-wider transition-all ${mode === 'script' ? 'bg-zinc-700 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+             >
+                Script
+             </button>
+             <button 
+                onClick={() => setMode('bullets')}
+                className={`px-3 py-1 rounded text-xs font-bold uppercase tracking-wider transition-all ${mode === 'bullets' ? 'bg-zinc-700 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+             >
+                Bullets
+             </button>
+          </div>
         </div>
 
         {/* Timer Control & Stats */}
@@ -185,7 +210,7 @@ const Memorizer: React.FC<MemorizerProps> = ({ script, onExit }) => {
             </button>
         </div>
 
-        <div className="flex items-center space-x-6">
+        <div className={`flex items-center space-x-6 transition-opacity duration-300 ${mode === 'bullets' ? 'opacity-30' : 'opacity-100'}`}>
            <div className="hidden sm:block text-right">
              <div className="text-[10px] font-black uppercase text-zinc-600">Progress</div>
              <div className="text-sm font-mono text-zinc-300">{progressPercentage}%</div>
@@ -200,42 +225,65 @@ const Memorizer: React.FC<MemorizerProps> = ({ script, onExit }) => {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-grow p-8 md:p-16 flex items-center justify-center">
-        <div className="max-w-4xl w-full">
-          <div className="text-2xl md:text-4xl font-semibold leading-relaxed font-mono tracking-tight text-zinc-200">
-            {words.map((word, idx) => {
-              const blacked = isWordBlackedOut(idx);
-              const isPeeking = peekIndex === idx;
+      <main className="flex-grow flex flex-col items-center justify-start overflow-y-auto">
+        
+        {mode === 'script' ? (
+             // --- Script Mode Content ---
+            <div className="max-w-4xl w-full p-8 md:p-16">
+            <div className="text-2xl md:text-4xl font-semibold leading-relaxed font-mono tracking-tight text-zinc-200">
+                {words.map((word, idx) => {
+                const blacked = isWordBlackedOut(idx);
+                const isPeeking = peekIndex === idx;
 
-              if (/\S/.test(word)) {
-                return (
-                  <span 
-                    key={idx} 
-                    onClick={() => {
-                        if (blacked) setPeekIndex(idx);
-                    }}
-                    className={`inline-block relative transition-all duration-300 rounded px-1 mb-1 ${
-                      blacked ? 'cursor-pointer select-none' : ''
-                    } ${
-                      blacked && !isPeeking ? 'bg-zinc-800 text-transparent' : 
-                      isPeeking ? 'bg-zinc-800 text-zinc-400' : 'text-zinc-100'
-                    }`}
-                  >
-                    {word}
-                    {blacked && !isPeeking && (
-                        <span className="absolute inset-0 bg-zinc-900 rounded border border-zinc-700/50 hover:bg-zinc-800 transition-colors" />
-                    )}
-                  </span>
-                );
-              }
-              return <span key={idx}>{word}</span>;
-            })}
-          </div>
-        </div>
+                if (/\S/.test(word)) {
+                    return (
+                    <span 
+                        key={idx} 
+                        onClick={() => {
+                            if (blacked) setPeekIndex(idx);
+                        }}
+                        className={`inline-block relative transition-all duration-300 rounded px-1 mb-1 ${
+                        blacked ? 'cursor-pointer select-none' : ''
+                        } ${
+                        blacked && !isPeeking ? 'bg-zinc-800 text-transparent' : 
+                        isPeeking ? 'bg-zinc-800 text-zinc-400' : 'text-zinc-100'
+                        }`}
+                    >
+                        {word}
+                        {blacked && !isPeeking && (
+                            <span className="absolute inset-0 bg-zinc-900 rounded border border-zinc-700/50 hover:bg-zinc-800 transition-colors" />
+                        )}
+                    </span>
+                    );
+                }
+                return <span key={idx}>{word}</span>;
+                })}
+            </div>
+            </div>
+        ) : (
+             // --- Bullet Mode Content ---
+            <div className="max-w-4xl w-full h-full p-8 md:p-16 flex flex-col">
+                <div className="mb-6 text-center">
+                    <h2 className="text-zinc-400 text-sm font-bold uppercase tracking-widest mb-2">Bullet Point Mode</h2>
+                    <p className="text-zinc-500 text-sm">Write your cues below. Speak your script referencing only these points.</p>
+                </div>
+                <div className="flex-grow relative group">
+                    <textarea 
+                        value={bullets}
+                        onChange={(e) => setBullets(e.target.value)}
+                        placeholder="• Enter your first cue...&#10;• Enter your second cue...&#10;• Enter your third cue..."
+                        className="w-full h-[60vh] bg-zinc-900/50 text-white text-2xl font-mono p-8 rounded-xl border border-zinc-800 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 resize-none leading-loose placeholder:text-zinc-700"
+                    />
+                    <div className="absolute top-4 right-4 text-xs text-zinc-600 font-bold uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                        Editable
+                    </div>
+                </div>
+            </div>
+        )}
       </main>
 
-      {/* Bottom Controls */}
-      <footer className="border-t border-zinc-900 p-8 sticky bottom-0 bg-black/80 backdrop-blur-md">
+      {/* Bottom Controls (Only show for script mode) */}
+      <footer className={`border-t border-zinc-900 p-8 sticky bottom-0 bg-black/80 backdrop-blur-md transition-transform duration-300 ${mode === 'bullets' ? 'translate-y-full absolute' : ''}`}>
         <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6">
           <div className="flex items-center space-x-2 order-2 sm:order-1">
             <Button variant="secondary" size="lg" onClick={prevStep} disabled={blackedOutCount === 0}>

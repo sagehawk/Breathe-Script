@@ -3,6 +3,7 @@ export interface Script {
   id: string;
   title: string;
   content: string;
+  bullets?: string; // Stored as a newline-separated string
   createdAt: number;
 }
 

@@ -58,11 +58,15 @@ const App: React.FC = () => {
         id: Math.random().toString(36).substr(2, 9),
         title: scriptData.title || 'Untitled Script',
         content: scriptData.content || '',
+        bullets: scriptData.bullets || '',
         createdAt: Date.now(),
       };
       setScripts([newScript, ...scripts]);
     }
-    setView('list');
+    // Only switch view if we are not just auto-saving from Memorizer
+    if (view === 'edit') {
+        setView('list');
+    }
   };
 
   const activeScript = scripts.find(s => s.id === activeScriptId);
@@ -124,7 +128,8 @@ const App: React.FC = () => {
       {view === 'memorize' && activeScript && (
         <Memorizer 
           script={activeScript} 
-          onExit={() => setView('list')} 
+          onExit={() => setView('list')}
+          onSave={handleSave}
         />
       )}
     </div>

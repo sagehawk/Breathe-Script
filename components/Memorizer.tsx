@@ -8,10 +8,46 @@ interface MemorizerProps {
   onSave: (script: Partial<Script>) => void;
 }
 
+// Helper to format initial content into HTML list if it's plain text
+const formatInitialContent = (content?: string) => {
+  if (!content || !content.trim()) return '<ul><li><br></li></ul>';
+  // If it already looks like HTML (has list tags), return as is
+  if (content.includes('<ul>') || content.includes('<ol>') || content.includes('<li>')) {
+    return content;
+  }
+  // Convert plain text newlines to list items
+  const listItems = content
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0)
+    .map(line => `<li>${line}</li>`)
+    .join('');
+  return `<ul>${listItems || '<li><br></li>'}</ul>`;
+};
+
+const ToolbarButton: React.FC<{ 
+  cmd: string; 
+  label: React.ReactNode; 
+  title: string;
+}> = ({ cmd, label, title }) => (
+  <button
+    onMouseDown={(e) => {
+      e.preventDefault(); // Prevent focus loss
+      document.execCommand(cmd, false);
+    }}
+    className="px-3 py-1.5 min-w-[32px] rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors font-bold text-sm"
+    title={title}
+  >
+    {label}
+  </button>
+);
+
 const Memorizer: React.FC<MemorizerProps> = ({ script, onExit, onSave }) => {
   // Modes: 'script' (Blackout) or 'bullets' (Cues)
   const [mode, setMode] = useState<'script' | 'bullets'>('script');
-  const [bullets, setBullets] = useState(script.bullets || '');
+  
+  // Initialize bullets with formatting
+  const [bulletsHtml, setBulletsHtml] = useState(() => formatInitialContent(script.bullets));
 
   // --- Script Mode Logic ---
   const words = useMemo(() => {
@@ -33,16 +69,19 @@ const Memorizer: React.FC<MemorizerProps> = ({ script, onExit, onSave }) => {
   const [elapsed, setElapsed] = useState(0);
   const startTimeRef = useRef<number>(0);
   const timerIntervalRef = useRef<number>(0);
+  const editorRef = useRef<HTMLDivElement>(null);
 
-  // Handle saving bullets when they change (debounced or on unmount ideally, here we do on change for simplicity)
+  // Auto-save bullets
   useEffect(() => {
-    if (bullets !== script.bullets) {
+    if (bulletsHtml !== script.bullets) {
        const timer = setTimeout(() => {
-         onSave({ ...script, bullets });
-       }, 500);
+         // If html is empty or just empty list, save empty string? 
+         // Keeping it as HTML is safer for persistence.
+         onSave({ ...script, bullets: bulletsHtml });
+       }, 1000);
        return () => clearTimeout(timer);
     }
-  }, [bullets, script, onSave]);
+  }, [bulletsHtml, script, onSave]);
 
   useEffect(() => {
     if (peekIndex !== null) {
@@ -56,6 +95,15 @@ const Memorizer: React.FC<MemorizerProps> = ({ script, onExit, onSave }) => {
   useEffect(() => {
     return () => clearInterval(timerIntervalRef.current);
   }, []);
+
+  // Sync contentEditable on mode switch
+  useEffect(() => {
+    if (mode === 'bullets' && editorRef.current) {
+        if (editorRef.current.innerHTML !== bulletsHtml) {
+            editorRef.current.innerHTML = bulletsHtml;
+        }
+    }
+  }, [mode]);
 
   const toggleTimer = () => {
     if (isTiming) {
@@ -134,6 +182,13 @@ const Memorizer: React.FC<MemorizerProps> = ({ script, onExit, onSave }) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleEditorKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Tab') {
+        e.preventDefault();
+        document.execCommand(e.shiftKey ? 'outdent' : 'indent');
+    }
   };
 
   return (
@@ -262,21 +317,43 @@ const Memorizer: React.FC<MemorizerProps> = ({ script, onExit, onSave }) => {
             </div>
         ) : (
              // --- Bullet Mode Content ---
-            <div className="max-w-4xl w-full h-full p-8 md:p-16 flex flex-col">
-                <div className="mb-6 text-center">
-                    <h2 className="text-zinc-400 text-sm font-bold uppercase tracking-widest mb-2">Bullet Point Mode</h2>
-                    <p className="text-zinc-500 text-sm">Write your cues below. Speak your script referencing only these points.</p>
+            <div className="max-w-4xl w-full h-full p-8 md:p-16 flex flex-col items-center">
+                
+                {/* Toolbar */}
+                <div className="flex items-center gap-2 mb-6 bg-zinc-900 p-2 rounded-xl border border-zinc-800 shadow-lg animate-in fade-in slide-in-from-bottom-2">
+                    <ToolbarButton cmd="bold" label="B" title="Bold" />
+                    <ToolbarButton cmd="italic" label="I" title="Italic" />
+                    <ToolbarButton cmd="underline" label="U" title="Underline" />
+                    <div className="w-px h-4 bg-zinc-700 mx-2"></div>
+                    <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider px-2">
+                        Type to bullet • Tab to indent
+                    </span>
                 </div>
-                <div className="flex-grow relative group">
-                    <textarea 
-                        value={bullets}
-                        onChange={(e) => setBullets(e.target.value)}
-                        placeholder="• Enter your first cue...&#10;• Enter your second cue...&#10;• Enter your third cue..."
-                        className="w-full h-[60vh] bg-zinc-900/50 text-white text-2xl font-mono p-8 rounded-xl border border-zinc-800 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 resize-none leading-loose placeholder:text-zinc-700"
+
+                <div className="relative w-full flex-grow flex flex-col">
+                    <div 
+                        ref={editorRef}
+                        contentEditable
+                        suppressContentEditableWarning
+                        onInput={(e) => setBulletsHtml(e.currentTarget.innerHTML)}
+                        onKeyDown={handleEditorKeyDown}
+                        className="w-full flex-grow bg-zinc-900/30 text-zinc-200 text-xl font-mono p-8 rounded-2xl border border-zinc-800/50 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 focus:bg-zinc-900/50 transition-all overflow-y-auto 
+                        [&_ul]:list-disc [&_ul]:pl-6 
+                        [&_ol]:list-decimal [&_ol]:pl-6 
+                        [&_ul_ul]:list-[circle] [&_ul_ul]:mt-1
+                        [&_ul_ul_ul]:list-[square]
+                        [&_li]:mb-2 [&_li]:pl-1
+                        [&_b]:text-blue-400 [&_b]:font-bold
+                        [&_i]:text-purple-300 [&_i]:italic
+                        [&_u]:underline [&_u]:decoration-zinc-500 [&_u]:underline-offset-4"
                     />
-                    <div className="absolute top-4 right-4 text-xs text-zinc-600 font-bold uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                        Editable
-                    </div>
+                    
+                    {/* Placeholder hint if empty */}
+                    {!bulletsHtml.replace(/<[^>]*>/g, '').trim() && (
+                        <div className="absolute top-8 left-14 text-zinc-700 pointer-events-none text-xl font-mono italic">
+                            Start typing your cues...
+                        </div>
+                    )}
                 </div>
             </div>
         )}
